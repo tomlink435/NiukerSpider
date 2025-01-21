@@ -8,6 +8,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import hashlib
 import httpx
+from fuzzywuzzy import fuzz
+from openpyxl.reader.excel import load_workbook
 
 CATEGORY_KEYWORDS = {
     "JUC": [
@@ -253,15 +255,17 @@ MAX_THREADS = 10  # 最大线程数
 def calculate_hash(content):
     return hashlib.md5(content.encode('utf-8')).hexdigest()
 
+import re
 
 def categorize_content(content):
     matched_categories = []
+    content_lower = content.lower()  # 转换内容为小写
     for category, keywords in CATEGORY_KEYWORDS.items():
         for keyword in keywords:
-            if keyword in content:
+            if keyword.lower() in content_lower:  # 转换关键词为小写匹配
                 matched_categories.append(category)
+                break
     return matched_categories if matched_categories else ["其他"]
-
 
 def edit_time(time):
     return datetime.fromtimestamp(time / 1000)
@@ -290,19 +294,40 @@ def _parse_newcoder_page(data):
     return res
 
 
-def get_newcoder_page(page):
+def get_newcoder_page1(page):
     header = {
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36",
         "content-type": "application/json"
     }
     payload = {"companyList": [], "jobId": 11002, "level": 3, "order": 3, "page": page, "isNewJob": True}
-    with httpx.Client(http2=True) as client:
-        response = requests.post(
-            'https://gw-c.nowcoder.com/api/sparta/job-experience/experience/job/list?_=1735811139897',
-            json=payload, headers=header
-        )
-        return _parse_newcoder_page(response.json())
+    response = requests.post(
+        'https://gw-c.nowcoder.com/api/sparta/job-experience/experience/job/list?_=1735811139897',
+        json=payload, headers=header
+    )
+    return _parse_newcoder_page(response.json())
+def get_newcoder_page(page, retries=3):
+    header = {
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36",
+        "content-type": "application/json"
+    }
+    payload = {"companyList": [], "jobId": 11002, "level": 3, "order": 3, "page": page, "isNewJob": True}
+    url = f'https://gw-c.nowcoder.com/api/sparta/job-experience/experience/job/list?_={int(time.time() * 1000)}'
 
+    for attempt in range(retries):
+        try:
+            with httpx.Client(http2=True) as client:
+                response = client.post(url, json=payload, headers=header, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                if not data.get('data') or not data['data'].get('records'):
+                    print(f"No records found for page {page}")
+                    return []
+                return _parse_newcoder_page(data)
+        except Exception as e:
+            print(f"Retry {attempt + 1}/{retries} failed for page {page}: {e}")
+            time.sleep(2)
+    print(f"Failed to fetch page {page} after {retries} attempts.")
+    return []
 
 def save_results_to_excel(data, filename):
     all_records = []
@@ -325,8 +350,18 @@ def save_results_to_excel(data, filename):
             })
 
     df = pd.DataFrame(all_records)
-    df.to_excel(filename, index=False, engine='openpyxl')
-    print(f"Results saved to {filename}")
+    try:
+        # 尝试加载已存在的工作簿
+        book = load_workbook(filename)
+        with pd.ExcelWriter(filename, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
+            # writer.book = book
+            # 追加到现有的工作表中，或者新建一个工作表
+            df.to_excel(writer, index=False, sheet_name='Sheet1', startrow=book['Sheet1'].max_row, header=False)
+            print(f"Results saved to {filename}")
+    except FileNotFoundError:
+        # 如果文件不存在，则直接写入
+        with pd.ExcelWriter(filename, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Sheet1')
 
 
 def save_progress(page):
@@ -341,35 +376,41 @@ def load_progress():
     return 1
 
 
+from threading import Lock
+
+lock = Lock()
+
 def run():
     start_page = load_progress()
     all_data = []
 
     with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
-        futures = {executor.submit(get_newcoder_page, page): page for page in range(start_page, 3000)}
-
-        for future in as_completed(futures):
-            page = futures[future]
+        page = start_page
+        while True:
+            future = executor.submit(get_newcoder_page, page)
             try:
                 print(f"Fetching page {page}...")
                 data = future.result()
                 if not data:
+                    print(f"No data found on page {page}, stopping.")
                     break
-                all_data.extend(data)
-                # 每 10 页保存一次
+                with lock:  # 确保线程安全
+                    all_data.extend(data)
+
                 if len(all_data) >= 200:
-                    save_results_to_excel(all_data, SAVE_FILE)
-                    all_data.clear()  # 清空临时存储
-                    save_progress(page + 1)
-                # save_results_to_excel(all_data, SAVE_FILE)
-                # save_progress(page + 1)  # 保存进度
+                    with lock:
+                        save_results_to_excel(all_data, SAVE_FILE)
+                        all_data.clear()
+                        save_progress(page + 1)
+
+                page += 1
                 time.sleep(random.uniform(0.3, 0.6))
             except Exception as e:
                 print(f"Error on page {page}: {e}")
-                save_results_to_excel(all_data, SAVE_FILE)
-                raise e
-    return all_data
-
+                with lock:
+                    save_results_to_excel(all_data, SAVE_FILE)
+                    save_progress(page)
+                break
 
 def main():
     try:
