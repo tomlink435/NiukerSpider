@@ -297,14 +297,18 @@ def get_newcoder_page(page=1):
 
 def run():
     res = []
-    for i in range(1, 3):  # 你可以根据需要调整页数
-        print(f"Fetching page {i}...")
-        page = get_newcoder_page(i)
-        if not page:
-            break
-        res.extend(page)
-        time.sleep(1)  # 防止请求过快，模拟正常访问
-
+    for i in range(1, 301):  # 你可以根据需要调整页数
+        try:
+            print(f"Fetching page {i}...")
+            page = get_newcoder_page(i)
+            if not page:
+                break
+            res.extend(page)
+            time.sleep(0.5)  # 防止请求过快，模拟正常访问
+        except Exception as e:
+            print(f"Error on page {i}: {e}")
+            save_results_to_excel(res, filename="interview_experience_partial.xlsx")
+            raise e
     return res
 
 
