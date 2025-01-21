@@ -247,17 +247,14 @@ CATEGORY_KEYWORDS = {
 
 
 def categorize_content(content):
-    """
-    根据面经内容进行分类，返回分类结果。
-    :param content: 面经内容
-    :return: 分类标签（如 JUC, JVM, Java基础）
-    """
     matched_categories = []
+    content_lower = content.lower()  # 转换内容为小写
     for category, keywords in CATEGORY_KEYWORDS.items():
         for keyword in keywords:
-            if keyword in content:
+            if keyword.lower() in content_lower:  # 转换关键词为小写匹配
                 matched_categories.append(category)
-    return matched_categories if matched_categories else ["其他"]  # 如果没有匹配到任何分类，返回 "其他"
+                break
+    return matched_categories if matched_categories else ["其他"]
 
 
 def _parse_newcoder_page(data):
@@ -309,12 +306,13 @@ def run():
             if not page:
                 break
             res.extend(page)
-            time.sleep(0.5)  # 防止请求过快，模拟正常访问
+            time.sleep(0.35)  # 防止请求过快，模拟正常访问
         except Exception as e:
             print(f"Error on page {i}: {e}")
             save_results_to_excel(res, filename="interview_experience_partial.xlsx")
             raise e
     return res
+
 
 
 def save_results_to_excel(data, filename="interview_experience_by_category.xlsx"):
