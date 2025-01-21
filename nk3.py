@@ -1,3 +1,5 @@
+import random
+
 import requests
 import time
 import pandas as pd
@@ -5,6 +7,7 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import hashlib
+import httpx
 
 CATEGORY_KEYWORDS = {
     "JUC": [
@@ -293,11 +296,12 @@ def get_newcoder_page(page):
         "content-type": "application/json"
     }
     payload = {"companyList": [], "jobId": 11002, "level": 3, "order": 3, "page": page, "isNewJob": True}
-    response = requests.post(
-        'https://gw-c.nowcoder.com/api/sparta/job-experience/experience/job/list?_=1735811139897',
-        json=payload, headers=header
-    )
-    return _parse_newcoder_page(response.json())
+    with httpx.Client(http2=True) as client:
+        response = requests.post(
+            'https://gw-c.nowcoder.com/api/sparta/job-experience/experience/job/list?_=1735811139897',
+            json=payload, headers=header
+        )
+        return _parse_newcoder_page(response.json())
 
 
 def save_results_to_excel(data, filename):
@@ -308,6 +312,7 @@ def save_results_to_excel(data, filename):
         for part in record['categorized_content']:
             content_hash = calculate_hash(part['content'])
             if content_hash in unique_records:
+                print(f"Skipping duplicate record: {part['content']}")
                 continue
             unique_records.add(content_hash)
             all_records.append({
@@ -340,7 +345,7 @@ def run():
     start_page = load_progress()
     all_data = []
 
-    with ThreadPoolExecutor(max_threads=MAX_THREADS) as executor:
+    with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
         futures = {executor.submit(get_newcoder_page, page): page for page in range(start_page, 3000)}
 
         for future in as_completed(futures):
@@ -351,9 +356,14 @@ def run():
                 if not data:
                     break
                 all_data.extend(data)
-                save_results_to_excel(all_data, SAVE_FILE)
-                save_progress(page + 1)  # 保存进度
-                time.sleep(0.5)
+                # 每 10 页保存一次
+                if len(all_data) >= 200:
+                    save_results_to_excel(all_data, SAVE_FILE)
+                    all_data.clear()  # 清空临时存储
+                    save_progress(page + 1)
+                # save_results_to_excel(all_data, SAVE_FILE)
+                # save_progress(page + 1)  # 保存进度
+                time.sleep(random.uniform(0.3, 0.6))
             except Exception as e:
                 print(f"Error on page {page}: {e}")
                 save_results_to_excel(all_data, SAVE_FILE)
