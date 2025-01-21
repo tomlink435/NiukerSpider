@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import requests
 import json
 import time
@@ -262,6 +264,7 @@ def _parse_newcoder_page(data):
         x = x['contentData'] if 'contentData' in x else x['momentData']
         dic['title'] = x['title']
         dic['content'] = x['content']
+        dic['time'] = edit_time(x['editTime'])
 
         # 拆分并分类内容
         content_parts = x['content'].split("\n")  # 按换行符分段
@@ -274,7 +277,8 @@ def _parse_newcoder_page(data):
         dic['categorized_content'] = categorized_parts
         res.append(dic)
     return res
-
+def edit_time(time):
+    return  datetime.fromtimestamp(time/1000)
 
 def get_newcoder_page(page=1):
     header = {
@@ -293,7 +297,7 @@ def get_newcoder_page(page=1):
 
 def run():
     res = []
-    for i in range(1, 301):  # 你可以根据需要调整页数
+    for i in range(1, 3):  # 你可以根据需要调整页数
         print(f"Fetching page {i}...")
         page = get_newcoder_page(i)
         if not page:
@@ -314,7 +318,8 @@ def save_results_to_excel(data, filename="interview_experience_by_category.xlsx"
                 'contentId': record['contentId'],
                 'title': record['title'],
                 'content': part['content'],
-                'categories': ', '.join(part['categories'])
+                'categories': ', '.join(part['categories']),
+                'time': record['time']
             })
 
     df = pd.DataFrame(all_records)  # 将拆分后的记录转换为DataFrame
