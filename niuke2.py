@@ -302,7 +302,7 @@ def get_newcoder_page(page=1):
 
 def run():
     res = []
-    for i in range(1, 301):  # 你可以根据需要调整页数
+    for i in range(1, 3000):  # 你可以根据需要调整页数
         try:
             print(f"Fetching page {i}...")
             page = get_newcoder_page(i)
