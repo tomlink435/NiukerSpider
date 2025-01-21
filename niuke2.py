@@ -5,6 +5,11 @@ import json
 import time
 import re
 import pandas as pd
+import hashlib
+
+def calculate_hash(content):
+    return hashlib.md5(content.strip().encode('utf-8')).hexdigest()
+
 CATEGORY_KEYWORDS = {
     "JUC": [
         # 基本概念
@@ -315,8 +320,13 @@ def run():
 def save_results_to_excel(data, filename="interview_experience_by_category.xlsx"):
     # 将数据保存为Excel文件
     all_records = []
+    unique_records = set()
     for record in data:
         for part in record['categorized_content']:
+            content_hash = calculate_hash(part['content'])
+            if content_hash in unique_records:  # 如果哈希值已存在，则跳过
+                continue
+            unique_records.add(content_hash)
             all_records.append({
                 'user': record['user'],
                 'contentId': record['contentId'],
