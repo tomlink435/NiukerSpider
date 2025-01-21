@@ -8,7 +8,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import hashlib
 import httpx
-from fuzzywuzzy import fuzz
 from openpyxl.reader.excel import load_workbook
 
 CATEGORY_KEYWORDS = {
