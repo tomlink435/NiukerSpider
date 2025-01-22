@@ -289,8 +289,9 @@ def get_newcoder_page(page=1):
     }
 
     payload = {"companyList": [], "jobId": 11002, "level": 3, "order": 3, "page": page, "isNewJob": True}
+    url = f'https://gw-c.nowcoder.com/api/sparta/job-experience/experience/job/list?_={int(time.time() * 1000)}'
 
-    x = requests.post('https://gw-c.nowcoder.com/api/sparta/job-experience/experience/job/list?_=1735811139897',
+    x = requests.post(f'https://gw-c.nowcoder.com/api/sparta/job-experience/experience/job/list?_={int(time.time() * 1000)}',
                       json=payload, headers=header)
     data = _parse_newcoder_page(x.json())
 
